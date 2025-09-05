@@ -4,24 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Captura de Precios</title>
-    
+    <!-- Metaetiquetas para PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4F46E5">
     <meta name="description" content="App para capturar precios de productos y competidores">
-    
-    <link rel="manifest" href="/manifest.json">
-    
-    <link rel="apple-touch-icon" href="pwa_icons/apple-icon-180.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="pwa_icons/android-icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="pwa_icons/android-icon-512.png">
-
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React y ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+    <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.2/dist/umd/supabase.min.js"></script>
-
+    <!-- Manifiesto PWA -->
+    <script type="application/json" id="manifest-json">
+        {
+            "name": "Captura de Precios",
+            "short_name": "PreciosApp",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#F9FAFB",
+            "theme_color": "#4F46E5",
+            "icons": [
+                {
+                    "src": "https://via.placeholder.com/192x192.png?text=Icon",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "https://via.placeholder.com/512x512.png?text=Icon",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }
+            ]
+        }
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -32,10 +51,10 @@
         }
         @media (max-width: 640px) {
             .container { padding: 0.5rem; }
-            button, select, input { font-size: 1rem; min-height: 48px; }
+            button, select, input, textarea { font-size: 1rem; min-height: 48px; }
             .btn-icon { width: 48px; height: 48px; }
         }
-        button, select, input {
+        button, select, input, textarea {
             transition: all 0.2s ease-in-out;
         }
         button:hover:not(:disabled) {
@@ -100,13 +119,14 @@
                 const fetchTopSellers = async () => {
                     setLoading(true);
                     try {
-                        const now = new Date();
-                        now.setHours(0, 0, 0, 0);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const startDate = today.toISOString();
 
                         const { data, error } = await supabase
                             .from('web_precios')
                             .select('promoter_name')
-                            .gte('created_at', now.toISOString());
+                            .gte('created_at', startDate);
 
                         if (error) throw error;
 
@@ -122,7 +142,7 @@
 
                         setTopSellers(sorted);
                     } catch (e) {
-                        console.error('Error al cargar top:', e);
+                        console.error('Error al cargar top del día:', e);
                     } finally {
                         setLoading(false);
                     }
@@ -132,7 +152,7 @@
 
             return (
                 <div className="bg-white card p-5 mb-6 shadow-md">
-                    <h3 className="text-lg font-bold text-indigo-700 mb-4 text-center">🏆 Top 5 Promotores del Día</h3>
+                    <h3 className="text-lg font-bold text-indigo-700 mb-4 text-center">🔥 Top 5 del Día</h3>
                     {loading ? (
                         <p className="text-gray-500 text-sm text-center">Cargando ranking...</p>
                     ) : topSellers.length > 0 ? (
@@ -153,13 +173,73 @@
                             })}
                         </ol>
                     ) : (
-                        <p className="text-gray-500 text-sm text-center">No hay datos hoy.</p>
+                        <p className="text-gray-500 text-sm text-center">No hay visitas hoy.</p>
                     )}
                 </div>
             );
         };
 
-        // Pantalla de Login con Top 5
+        // Componente: Posición del usuario en el ranking
+        const UserRank = ({ promoterName }) => {
+            const [rank, setRank] = useState(null);
+            const [total, setTotal] = useState(0);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                const fetchUserRank = async () => {
+                    setLoading(true);
+                    try {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const startDate = today.toISOString();
+
+                        const { data, error } = await supabase
+                            .from('web_precios')
+                            .select('promoter_name')
+                            .gte('created_at', startDate);
+
+                        if (error) throw error;
+
+                        const counts = data.reduce((acc, item) => {
+                            acc[item.promoter_name] = (acc[item.promoter_name] || 0) + 1;
+                            return acc;
+                        }, {});
+
+                        const sortedNames = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+                        const userIndex = sortedNames.indexOf(promoterName);
+                        const userRank = userIndex !== -1 ? userIndex + 1 : null;
+
+                        setRank(userRank);
+                        setTotal(sortedNames.length);
+                    } catch (e) {
+                        console.error('Error al cargar tu posición:', e);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                fetchUserRank();
+            }, [promoterName]);
+
+            return (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg mb-6 border border-blue-100">
+                    <h3 className="text-sm font-bold text-blue-700 mb-2">📊 Tu Posición Nacional</h3>
+                    {loading ? (
+                        <p className="text-gray-500 text-sm">Cargando tu ranking...</p>
+                    ) : rank ? (
+                        <p className="text-gray-700 text-sm">
+                            Hoy estás en el puesto <span className="font-bold text-blue-600">#{rank}</span> de <strong>{total}</strong> promotores.
+                            {rank === 1 && " 🏆 ¡Eres el líder del día!"}
+                        </p>
+                    ) : (
+                        <p className="text-gray-500 text-sm">
+                            Aún no tienes visitas hoy. ¡Haz tu primera captura para entrar al ranking!
+                        </p>
+                    )}
+                </div>
+            );
+        };
+
+        // Pantalla de Login
         const LoginScreen = ({ onLogin }) => {
             const [promoterId, setPromoterId] = useState('');
             const [loading, setLoading] = useState(false);
@@ -209,6 +289,7 @@
             return (
                 <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-indigo-100 to-gray-100 p-4">
                     <div className="w-full max-w-md bg-white card p-6">
+                        {/* Top 5 del día */}
                         <TopSellers />
 
                         <h1 className="text-2xl font-extrabold text-center text-indigo-700 mb-4">Ingresa tu ID</h1>
@@ -232,12 +313,14 @@
                                 {error}
                             </div>
                         )}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.1</div>
+                        {/* Versión */}
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.2</div>
                     </div>
                 </div>
             );
         };
 
+        // Iconos SVG
         const Icon = ({ children, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
                  fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -267,6 +350,7 @@
             </Icon>
         );
 
+        // Fila de ítem
         const ItemRow = ({ item, type, onChange, onRemove, presentations, currencies, canRemove }) => (
             <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
                 <select value={item.presentation} onChange={(e) => onChange(e, type, item.id, 'presentation')}
@@ -302,6 +386,7 @@
             </div>
         );
 
+        // Pantalla de Captura de Datos
         const DataEntryScreen = ({ promoterName, promoterId, initialState, initialZone, newItem, setNewItem, error, setError, successMessage, setSuccessMessage, loading, setLoading }) => {
             const [presentationsCompetidor, setPresentationsCompetidor] = useState([]);
             const [presentationsMy, setPresentationsMy] = useState([]);
@@ -309,6 +394,7 @@
             const [zonas, setZonas] = useState([]);
             const [filteredZonas, setFilteredZonas] = useState([]);
             const [dataLoading, setDataLoading] = useState(true);
+            const [comments, setComments] = useState(''); // Nuevo estado para comentarios
 
             useEffect(() => {
                 const fetchData = async () => {
@@ -376,6 +462,30 @@
                 setError(null);
                 setSuccessMessage(null);
 
+                let latitude = null;
+                let longitude = null;
+
+                // === OBTENER COORDENADAS ===
+                if (navigator.geolocation) {
+                    try {
+                        const position = await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                enableHighAccuracy: true,
+                                timeout: 10000,
+                                maximumAge: 60000,
+                            });
+                        });
+                        latitude = position.coords.latitude;
+                        longitude = position.coords.longitude;
+                    } catch (geoError) {
+                        console.warn("Permiso denegado o error de ubicación:", geoError.message);
+                    }
+                } else {
+                    setError("Tu dispositivo no soporta geolocalización.");
+                    setLoading(false);
+                    return;
+                }
+
                 try {
                     if (!newItem.state || !newItem.zone || !newItem.trade) {
                         setError("Completa Estado, Zona y Comercio.");
@@ -383,8 +493,12 @@
                         return;
                     }
 
-                    const validCompetitorItems = newItem.competitoritems.filter(item => item.presentation && item.price && item.currency);
-                    const validMyItems = newItem.myitems.filter(item => item.presentation && item.price && item.currency);
+                    const validCompetitorItems = newItem.competitoritems.filter(item => 
+                        item.presentation && item.price && item.currency
+                    );
+                    const validMyItems = newItem.myitems.filter(item => 
+                        item.presentation && item.price && item.currency
+                    );
 
                     if (validCompetitorItems.length === 0 && validMyItems.length === 0) {
                         setError("Agrega al menos un ítem completo.");
@@ -409,12 +523,17 @@
                             currency: item.currency,
                             stock_shelf: item.stock_shelf,
                             stock_warehouse: item.stock_warehouse
-                        }))
+                        })),
+                        latitude,
+                        longitude,
+                        comments: comments.trim() || null, // Guardar comentarios (null si vacío)
                     };
 
                     const { error } = await supabase.from('web_precios').insert([visitData]);
                     if (error) throw error;
 
+                    // Resetear comentarios
+                    setComments('');
                     setNewItem({
                         state: initialState || '',
                         zone: initialZone || '',
@@ -422,8 +541,9 @@
                         competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
                         myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
                     });
-                    setSuccessMessage("¡Datos guardados con éxito!");
+                    setSuccessMessage("✅ Datos, ubicación y comentarios guardados con éxito.");
                 } catch (e) {
+                    console.error("Error al guardar:", e);
                     setError(`Error al guardar: ${e.message}`);
                 } finally {
                     setLoading(false);
@@ -437,6 +557,9 @@
                         <p className="text-center text-gray-600 mb-4 text-sm">
                             Bienvenido, <span className="font-semibold text-indigo-600">{promoterName}</span>
                         </p>
+
+                        {/* Posición del usuario */}
+                        <UserRank promoterName={promoterName} />
 
                         {error && (
                             <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 mb-4 rounded-lg text-sm">
@@ -507,6 +630,17 @@
                                 ))}
                             </div>
 
+                            {/* Campo de comentarios opcional */}
+                            <div className="flex flex-col">
+                                <label className="text-gray-700 font-semibold text-sm mb-1">Comentarios (opcional)</label>
+                                <textarea
+                                    value={comments}
+                                    onChange={(e) => setComments(e.target.value)}
+                                    placeholder="Describe alguna situación (ej: producto agotado, competidor sin stock, etc.)"
+                                    className="w-full p-3 border border-gray-300 rounded-xl input-focus h-20 resize-none"
+                                />
+                            </div>
+
                             <button type="submit" disabled={loading || dataLoading}
                                     className="w-full btn-primary text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2">
                                 <Save size={24} />
@@ -518,6 +652,7 @@
             );
         };
 
+        // App Principal
         const App = () => {
             const [promoterId, setPromoterId] = useState('');
             const [promoterName, setPromoterName] = useState('');
@@ -535,18 +670,13 @@
                 myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
             });
 
-            // Registrar el Service Worker al cargar la página
             useEffect(() => {
-                if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', () => {
-                        navigator.serviceWorker.register('/service-worker.js')
-                            .then(registration => {
-                                console.log('Service Worker registrado con éxito:', registration);
-                            })
-                            .catch(error => {
-                                console.error('Fallo el registro del Service Worker:', error);
-                            });
-                    });
+                const manifest = document.getElementById('manifest-json');
+                if (manifest) {
+                    const manifestLink = document.createElement('link');
+                    manifestLink.rel = 'manifest';
+                    manifestLink.href = 'data:application/json,' + encodeURIComponent(manifest.textContent);
+                    document.head.appendChild(manifestLink);
                 }
             }, []);
 
