@@ -75,6 +75,9 @@
         .btn-primary:hover:not(:disabled) {
             background: linear-gradient(to right, #4338CA, #6D28D9);
         }
+        .error-text {
+            @apply text-red-600 text-xs mt-1;
+        }
     </style>
 </head>
 <body>
@@ -314,7 +317,7 @@
                             </div>
                         )}
                         {/* Versión */}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.2</div>
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.3</div>
                     </div>
                 </div>
             );
@@ -350,41 +353,90 @@
             </Icon>
         );
 
-        // Fila de ítem
-        const ItemRow = ({ item, type, onChange, onRemove, presentations, currencies, canRemove }) => (
-            <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
-                <select value={item.presentation} onChange={(e) => onChange(e, type, item.id, 'presentation')}
-                        className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-xl input-focus" required>
-                    <option value="">-- Presentación --</option>
-                    {presentations.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <input type="number" placeholder="Precio" value={item.price}
-                       onChange={(e) => onChange(e, type, item.id, 'price')}
-                       className="w-full sm:w-1/4 p-3 border border-gray-300 rounded-xl input-focus" required />
-                <select value={item.currency} onChange={(e) => onChange(e, type, item.id, 'currency')}
-                        className="w-full sm:w-1/4 p-3 border border-gray-300 rounded-xl input-focus" required>
-                    <option value="">-- Moneda --</option>
-                    {currencies.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                {type === 'myitems' && (
-                    <>
-                        <input type="number" placeholder="Stock Anaquel" value={item.stock_shelf}
-                               onChange={(e) => onChange(e, type, item.id, 'stock_shelf')}
-                               className="w-full sm:w-1/6 p-3 border border-gray-300 rounded-xl input-focus" required />
-                        <input type="number" placeholder="Stock Bodega" value={item.stock_warehouse}
-                               onChange={(e) => onChange(e, type, item.id, 'stock_warehouse')}
-                               className="w-full sm:w-1/6 p-3 border border-gray-300 rounded-xl input-focus" required />
-                    </>
-                )}
-                {canRemove && (
-                    <button type="button" onClick={() => onRemove(type, item.id)}
-                            className="btn-icon text-red-600 hover:text-red-800 p-2 rounded-full transition-transform duration-200"
-                            aria-label="Eliminar">
-                        <Minus size={24} />
-                    </button>
-                )}
-            </div>
-        );
+        // Fila de ítem con validación de precio
+        const ItemRow = ({ item, type, onChange, onRemove, presentations, currencies, canRemove, errors, setErrors, isMyItem, onToggleOutOfStock, isOutOfStock }) => {
+            const handleChange = (e) => {
+                const { value } = e.target;
+                onChange(e, type, item.id, 'price');
+                // Limpiar error al cambiar
+                if (errors[item.id]) {
+                    setErrors(prev => {
+                        const newErr = { ...prev };
+                        delete newErr[item.id];
+                        return newErr;
+                    });
+                }
+            };
+
+            if (isMyItem && item.presentation === 'sin stock') {
+                return (
+                    <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
+                        <select value={item.presentation} onChange={(e) => onChange(e, type, item.id, 'presentation')}
+                                className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-xl input-focus" required>
+                            <option value="">-- Presentación --</option>
+                            {presentations.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <div className="flex-1 text-gray-600 italic p-3">No hay stock de ningún producto nuestro en este local.</div>
+                        {canRemove && (
+                            <button type="button" onClick={() => onRemove(type, item.id)}
+                                    className="btn-icon text-red-600 hover:text-red-800 p-2 rounded-full transition-transform duration-200"
+                                    aria-label="Eliminar">
+                                <Minus size={24} />
+                            </button>
+                        )}
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
+                    <select value={item.presentation} onChange={(e) => onChange(e, type, item.id, 'presentation')}
+                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-xl input-focus" required>
+                        <option value="">-- Presentación --</option>
+                        {presentations.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <input type="number" placeholder="Precio por Unidad" value={item.price}
+                           onChange={handleChange}
+                           className={`w-full sm:w-1/4 p-3 border rounded-xl input-focus ${errors[item.id] ? 'border-red-500' : 'border-gray-300'}`} required />
+                    <select value={item.currency} onChange={(e) => onChange(e, type, item.id, 'currency')}
+                            className="w-full sm:w-1/4 p-3 border border-gray-300 rounded-xl input-focus" required>
+                        <option value="">-- Moneda --</option>
+                        {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {type === 'myitems' && (
+                        <>
+                            <div className="flex flex-col sm:w-1/6">
+                                <input type="number" placeholder="Stock Anaquel (pacas)" value={item.stock_shelf}
+                                       onChange={(e) => onChange(e, type, item.id, 'stock_shelf')}
+                                       className="w-full p-3 border border-gray-300 rounded-xl input-focus" required={!isOutOfStock} disabled={isOutOfStock} />
+                            </div>
+                            <div className="flex flex-col sm:w-1/6">
+                                <input type="number" placeholder="Stock Bodega (bultos)" value={item.stock_warehouse}
+                                       onChange={(e) => onChange(e, type, item.id, 'stock_warehouse')}
+                                       className="w-full p-3 border border-gray-300 rounded-xl input-focus" required={!isOutOfStock} disabled={isOutOfStock} />
+                            </div>
+                            <div className="flex items-center justify-center sm:w-1/6">
+                                <label className="flex items-center text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" checked={isOutOfStock} onChange={() => onToggleOutOfStock(item.id)}
+                                           className="mr-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
+                                    Sin Stock
+                                </label>
+                            </div>
+                        </>
+                    )}
+                    {canRemove && (
+                        <button type="button" onClick={() => onRemove(type, item.id)}
+                                className="btn-icon text-red-600 hover:text-red-800 p-2 rounded-full transition-transform duration-200"
+                                aria-label="Eliminar">
+                            <Minus size={24} />
+                        </button>
+                    )}
+                    {errors[item.id] && (
+                        <div className="error-text col-span-full">{errors[item.id]}</div>
+                    )}
+                </div>
+            );
+        };
 
         // Pantalla de Captura de Datos
         const DataEntryScreen = ({ promoterName, promoterId, initialState, initialZone, newItem, setNewItem, error, setError, successMessage, setSuccessMessage, loading, setLoading }) => {
@@ -394,7 +446,11 @@
             const [zonas, setZonas] = useState([]);
             const [filteredZonas, setFilteredZonas] = useState([]);
             const [dataLoading, setDataLoading] = useState(true);
-            const [comments, setComments] = useState(''); // Nuevo estado para comentarios
+            const [comments, setComments] = useState('');
+            const [geoError, setGeoError] = useState(null); // Para error de geolocalización
+            const [priceErrors, setPriceErrors] = useState({}); // Errores de precio por ID
+            const [priceWarning, setPriceWarning] = useState(''); // Nuevo estado para el mensaje de advertencia global
+            const [outOfStockItems, setOutOfStockItems] = useState(new Set()); // IDs de ítems sin stock
 
             useEffect(() => {
                 const fetchData = async () => {
@@ -440,6 +496,16 @@
                     ...prev,
                     [type]: prev[type].map(item => item.id === id ? { ...item, [field]: value } : item)
                 }));
+                // Limpiar error si se cambia la moneda o el precio
+                if (priceErrors[id]) {
+                    setPriceErrors(prev => {
+                        const newErr = { ...prev };
+                        delete newErr[id];
+                        return newErr;
+                    });
+                    // También limpiar la advertencia global si se corrige un error
+                    setPriceWarning('');
+                }
             };
 
             const handleAddClick = (type) => {
@@ -454,6 +520,64 @@
                     ...prev,
                     [type]: prev[type].filter(item => item.id !== id)
                 }));
+                // Limpiar error al eliminar
+                if (priceErrors[id]) {
+                    setPriceErrors(prev => {
+                        const newErr = { ...prev };
+                        delete newErr[id];
+                        return newErr;
+                    });
+                    // También limpiar la advertencia global si se elimina un ítem con error
+                    setPriceWarning('');
+                }
+                // Eliminar del set de sin stock si aplica
+                if (type === 'myitems') {
+                    setOutOfStockItems(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(id);
+                        return newSet;
+                    });
+                }
+            };
+
+            const toggleOutOfStock = (id) => {
+                setOutOfStockItems(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(id)) {
+                        newSet.delete(id);
+                    } else {
+                        newSet.add(id);
+                    }
+                    return newSet;
+                });
+            };
+
+            const validatePrices = (items) => {
+                let hasError = false;
+                const newErrors = {};
+
+                items.forEach(item => {
+                    if (item.presentation === 'sin stock') return; // Saltar validación para 'sin stock'
+                    if (!item.price || !item.currency) return;
+                    const price = parseFloat(item.price);
+                    if (isNaN(price)) return;
+
+                    if (item.currency === 'BS' && (price < 100 || price > 1000)) {
+                        newErrors[item.id] = "El precio en Bs debe estar entre 100 y 1000 Bs.";
+                        hasError = true;
+                    } else if (item.currency === '$' && (price < 0.01 || price > 3)) {
+                        newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $3.00.";
+                        hasError = true;
+                    }
+                });
+
+                setPriceErrors(newErrors);
+                if (hasError) {
+                    setPriceWarning("❌ Error: Algunos precios están fuera del rango esperado. Corrige los errores antes de guardar.");
+                } else {
+                    setPriceWarning('');
+                }
+                return !hasError; // Devuelve true solo si NO hay errores
             };
 
             const handleSaveData = async (e) => {
@@ -461,29 +585,41 @@
                 setLoading(true);
                 setError(null);
                 setSuccessMessage(null);
+                setGeoError(null);
+                setPriceWarning(''); // Limpiar advertencia previa
+
+                // Validar precios (ahora bloquea el guardado si hay errores)
+                const allItems = [...newItem.competitoritems, ...newItem.myitems];
+                const arePricesValid = validatePrices(allItems);
+
+                if (!arePricesValid) {
+                    setLoading(false);
+                    return; // Bloquea el guardado si hay precios fuera de rango
+                }
+
+                // === OBTENER COORDENADAS (obligatorio, pero no bloquea) ===
+                if (!navigator.geolocation) {
+                    setGeoError("Tu dispositivo no soporta geolocalización.");
+                    // No retornamos aquí, permitimos guardar con advertencia
+                }
 
                 let latitude = null;
                 let longitude = null;
 
-                // === OBTENER COORDENADAS ===
-                if (navigator.geolocation) {
-                    try {
-                        const position = await new Promise((resolve, reject) => {
-                            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                                enableHighAccuracy: true,
-                                timeout: 10000,
-                                maximumAge: 60000,
-                            });
+                try {
+                    const position = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            enableHighAccuracy: true,
+                            timeout: 15000,
+                            maximumAge: 0,
                         });
-                        latitude = position.coords.latitude;
-                        longitude = position.coords.longitude;
-                    } catch (geoError) {
-                        console.warn("Permiso denegado o error de ubicación:", geoError.message);
-                    }
-                } else {
-                    setError("Tu dispositivo no soporta geolocalización.");
-                    setLoading(false);
-                    return;
+                    });
+                    latitude = position.coords.latitude;
+                    longitude = position.coords.longitude;
+                } catch (geoError) {
+                    console.warn("Error de geolocalización:", geoError.message);
+                    setGeoError("No se pudo obtener tu ubicación. Activa la geolocalización. De lo contrario, tu visita podría no ser válida.");
+                    // No retornamos aquí, permitimos guardar con advertencia
                 }
 
                 try {
@@ -493,11 +629,11 @@
                         return;
                     }
 
-                    const validCompetitorItems = newItem.competitoritems.filter(item => 
+                    const validCompetitorItems = newItem.competitoritems.filter(item =>
                         item.presentation && item.price && item.currency
                     );
-                    const validMyItems = newItem.myitems.filter(item => 
-                        item.presentation && item.price && item.currency
+                    const validMyItems = newItem.myitems.filter(item =>
+                        item.presentation && (item.presentation === 'sin stock' || (item.price && item.currency))
                     );
 
                     if (validCompetitorItems.length === 0 && validMyItems.length === 0) {
@@ -519,20 +655,20 @@
                         })),
                         myitems: validMyItems.map(item => ({
                             presentation: item.presentation,
-                            price: parseFloat(item.price),
-                            currency: item.currency,
-                            stock_shelf: item.stock_shelf,
-                            stock_warehouse: item.stock_warehouse
+                            price: item.presentation === 'sin stock' ? null : parseFloat(item.price),
+                            currency: item.presentation === 'sin stock' ? null : item.currency,
+                            // Si el ítem está marcado como "sin stock", guardar null en los campos de stock
+                            stock_shelf: item.presentation === 'sin stock' ? null : (outOfStockItems.has(item.id) ? null : (item.stock_shelf !== '' ? parseFloat(item.stock_shelf) : null)),
+                            stock_warehouse: item.presentation === 'sin stock' ? null : (outOfStockItems.has(item.id) ? null : (item.stock_warehouse !== '' ? parseFloat(item.stock_warehouse) : null))
                         })),
                         latitude,
                         longitude,
-                        comments: comments.trim() || null, // Guardar comentarios (null si vacío)
+                        comments: comments.trim() || null,
                     };
 
                     const { error } = await supabase.from('web_precios').insert([visitData]);
                     if (error) throw error;
 
-                    // Resetear comentarios
                     setComments('');
                     setNewItem({
                         state: initialState || '',
@@ -541,6 +677,7 @@
                         competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
                         myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
                     });
+                    setOutOfStockItems(new Set()); // Resetear el set de sin stock
                     setSuccessMessage("✅ Datos, ubicación y comentarios guardados con éxito.");
                 } catch (e) {
                     console.error("Error al guardar:", e);
@@ -561,6 +698,13 @@
                         {/* Posición del usuario */}
                         <UserRank promoterName={promoterName} />
 
+                        {/* === NUEVO: Mostrar advertencia de precios AQUÍ, arriba del formulario === */}
+                        {priceWarning && (
+                            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 mb-4 rounded-lg text-sm">
+                                {priceWarning}
+                            </div>
+                        )}
+
                         {error && (
                             <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 mb-4 rounded-lg text-sm">
                                 {error}
@@ -569,6 +713,11 @@
                         {successMessage && (
                             <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-3 mb-4 rounded-lg text-sm">
                                 {successMessage}
+                            </div>
+                        )}
+                        {geoError && (
+                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 mb-4 rounded-lg text-sm">
+                                {geoError}
                             </div>
                         )}
 
@@ -602,7 +751,7 @@
 
                             <div>
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className="text-gray-700 font-bold text-sm">Precios Competencia</span>
+                                    <span className="text-gray-700 font-bold text-sm">Precios Competencia por Unidad</span>
                                     <button type="button" onClick={() => handleAddClick('competitoritems')}
                                             className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
                                         <Plus size={24} />
@@ -611,13 +760,14 @@
                                 {newItem.competitoritems.map(item => (
                                     <ItemRow key={item.id} item={item} type="competitoritems" onChange={handleInputChange}
                                              onRemove={handleRemoveClick} presentations={presentationsCompetidor}
-                                             currencies={['BS', '$', 'Pesos']} canRemove={newItem.competitoritems.length > 1} />
+                                             currencies={['BS', '$', 'Pesos']} canRemove={newItem.competitoritems.length > 1}
+                                             errors={priceErrors} setErrors={setPriceErrors} />
                                 ))}
                             </div>
 
                             <div>
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className="text-gray-700 font-bold text-sm">Nuestros Precios</span>
+                                    <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
                                     <button type="button" onClick={() => handleAddClick('myitems')}
                                             className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
                                         <Plus size={24} />
@@ -626,11 +776,12 @@
                                 {newItem.myitems.map(item => (
                                     <ItemRow key={item.id} item={item} type="myitems" onChange={handleInputChange}
                                              onRemove={handleRemoveClick} presentations={presentationsMy}
-                                             currencies={['BS', '$', 'Pesos']} canRemove={newItem.myitems.length > 1} />
+                                             currencies={['BS', '$', 'Pesos']} canRemove={newItem.myitems.length > 1}
+                                             errors={priceErrors} setErrors={setPriceErrors} isMyItem={true}
+                                             onToggleOutOfStock={toggleOutOfStock} isOutOfStock={outOfStockItems.has(item.id)} />
                                 ))}
                             </div>
 
-                            {/* Campo de comentarios opcional */}
                             <div className="flex flex-col">
                                 <label className="text-gray-700 font-semibold text-sm mb-1">Comentarios (opcional)</label>
                                 <textarea
