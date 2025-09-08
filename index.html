@@ -568,8 +568,8 @@
                     if (item.currency === 'BS' && (price < 100 || price > 1000)) {
                         newErrors[item.id] = "El precio en Bs debe estar entre 100 y 1000 Bs.";
                         hasError = true;
-                    } else if (item.currency === '$' && (price < 0.01 || price > 3)) {
-                        newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $3.00.";
+                    } else if (item.currency === '$' && (price < 0.01 || price > 5)) {
+                        newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $5.00.";
                         hasError = true;
                     }
                 });
