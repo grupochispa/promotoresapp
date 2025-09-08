@@ -368,25 +368,8 @@
                 }
             };
 
-            if (isMyItem && item.presentation === 'sin stock') {
-                return (
-                    <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
-                        <select value={item.presentation} onChange={(e) => onChange(e, type, item.id, 'presentation')}
-                                className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-xl input-focus" required>
-                            <option value="">-- Presentación --</option>
-                            {presentations.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                        <div className="flex-1 text-gray-600 italic p-3">No hay stock de ningún producto nuestro en este local.</div>
-                        {canRemove && (
-                            <button type="button" onClick={() => onRemove(type, item.id)}
-                                    className="btn-icon text-red-600 hover:text-red-800 p-2 rounded-full transition-transform duration-200"
-                                    aria-label="Eliminar">
-                                <Minus size={24} />
-                            </button>
-                        )}
-                    </div>
-                );
-            }
+            const isNoStockPresentation = item.presentation === 'SIN STOCK';
+            const disableFields = isMyItem && isNoStockPresentation;
 
             return (
                 <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
@@ -397,29 +380,34 @@
                     </select>
                     <input type="number" placeholder="Precio por Unidad" value={item.price}
                            onChange={handleChange}
-                           className={`w-full sm:w-1/4 p-3 border rounded-xl input-focus ${errors[item.id] ? 'border-red-500' : 'border-gray-300'}`} required />
+                           disabled={disableFields}
+                           className={`w-full sm:w-1/4 p-3 border rounded-xl input-focus ${errors[item.id] ? 'border-red-500' : 'border-gray-300'} ${disableFields ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!disableFields} />
                     <select value={item.currency} onChange={(e) => onChange(e, type, item.id, 'currency')}
-                            className="w-full sm:w-1/4 p-3 border border-gray-300 rounded-xl input-focus" required>
+                            disabled={disableFields}
+                            className={`w-full sm:w-1/4 p-3 border border-gray-300 rounded-xl input-focus ${disableFields ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!disableFields}>
                         <option value="">-- Moneda --</option>
                         {currencies.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     {type === 'myitems' && (
                         <>
                             <div className="flex flex-col sm:w-1/6">
-                                <input type="number" placeholder="Stock Anaquel (pacas)" value={item.stock_shelf}
+                                <input type="number" placeholder="Stock Anaquel (En Kilos)" value={item.stock_shelf}
                                        onChange={(e) => onChange(e, type, item.id, 'stock_shelf')}
-                                       className="w-full p-3 border border-gray-300 rounded-xl input-focus" required={!isOutOfStock} disabled={isOutOfStock} />
+                                       disabled={isOutOfStock || disableFields}
+                                       className={`w-full p-3 border border-gray-300 rounded-xl input-focus ${(isOutOfStock || disableFields) ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!isOutOfStock && !disableFields} />
                             </div>
                             <div className="flex flex-col sm:w-1/6">
-                                <input type="number" placeholder="Stock Bodega (bultos)" value={item.stock_warehouse}
+                                <input type="number" placeholder="Stock Bodega (En Bultos)" value={item.stock_warehouse}
                                        onChange={(e) => onChange(e, type, item.id, 'stock_warehouse')}
-                                       className="w-full p-3 border border-gray-300 rounded-xl input-focus" required={!isOutOfStock} disabled={isOutOfStock} />
+                                       disabled={isOutOfStock || disableFields}
+                                       className={`w-full p-3 border border-gray-300 rounded-xl input-focus ${(isOutOfStock || disableFields) ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!isOutOfStock && !disableFields} />
                             </div>
                             <div className="flex items-center justify-center sm:w-1/6">
                                 <label className="flex items-center text-sm text-gray-700 cursor-pointer">
                                     <input type="checkbox" checked={isOutOfStock} onChange={() => onToggleOutOfStock(item.id)}
-                                           className="mr-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
-                                    Sin Stock
+                                           disabled={disableFields}
+                                           className={`mr-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded ${disableFields ? 'cursor-not-allowed' : ''}`} />
+                                    SIN STOCK
                                 </label>
                             </div>
                         </>
@@ -450,7 +438,7 @@
             const [geoError, setGeoError] = useState(null); // Para error de geolocalización
             const [priceErrors, setPriceErrors] = useState({}); // Errores de precio por ID
             const [priceWarning, setPriceWarning] = useState(''); // Nuevo estado para el mensaje de advertencia global
-            const [outOfStockItems, setOutOfStockItems] = useState(new Set()); // IDs de ítems sin stock
+            const [outOfStockItems, setOutOfStockItems] = useState(new Set()); // IDs de ítems SIN STOCK
 
             useEffect(() => {
                 const fetchData = async () => {
@@ -492,10 +480,25 @@
 
             const handleInputChange = (e, type, id, field) => {
                 const { value } = e.target;
-                setNewItem(prev => ({
-                    ...prev,
-                    [type]: prev[type].map(item => item.id === id ? { ...item, [field]: value } : item)
-                }));
+                setNewItem(prev => {
+                    let updatedItems = prev[type].map(item => {
+                        if (item.id === id) {
+                            let updatedItem = { ...item, [field]: value };
+                            if (field === 'presentation' && value === 'SIN STOCK' && type === 'myitems') {
+                                updatedItem.price = '';
+                                updatedItem.currency = '';
+                                updatedItem.stock_shelf = '';
+                                updatedItem.stock_warehouse = '';
+                            }
+                            return updatedItem;
+                        }
+                        return item;
+                    });
+                    return { ...prev, [type]: updatedItems };
+                });
+                if (field === 'presentation' && value === 'SIN STOCK' && type === 'myitems') {
+                    setOutOfStockItems(prev => new Set([...prev, id]));
+                }
                 // Limpiar error si se cambia la moneda o el precio
                 if (priceErrors[id]) {
                     setPriceErrors(prev => {
@@ -530,7 +533,7 @@
                     // También limpiar la advertencia global si se elimina un ítem con error
                     setPriceWarning('');
                 }
-                // Eliminar del set de sin stock si aplica
+                // Eliminar del set de SIN STOCK si aplica
                 if (type === 'myitems') {
                     setOutOfStockItems(prev => {
                         const newSet = new Set(prev);
@@ -557,7 +560,7 @@
                 const newErrors = {};
 
                 items.forEach(item => {
-                    if (item.presentation === 'sin stock') return; // Saltar validación para 'sin stock'
+                    if (item.presentation === 'SIN STOCK') return; // Saltar validación para 'SIN STOCK'
                     if (!item.price || !item.currency) return;
                     const price = parseFloat(item.price);
                     if (isNaN(price)) return;
@@ -633,7 +636,7 @@
                         item.presentation && item.price && item.currency
                     );
                     const validMyItems = newItem.myitems.filter(item =>
-                        item.presentation && (item.presentation === 'sin stock' || (item.price && item.currency))
+                        item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
                     );
 
                     if (validCompetitorItems.length === 0 && validMyItems.length === 0) {
@@ -655,11 +658,11 @@
                         })),
                         myitems: validMyItems.map(item => ({
                             presentation: item.presentation,
-                            price: item.presentation === 'sin stock' ? null : parseFloat(item.price),
-                            currency: item.presentation === 'sin stock' ? null : item.currency,
-                            // Si el ítem está marcado como "sin stock", guardar null en los campos de stock
-                            stock_shelf: item.presentation === 'sin stock' ? null : (outOfStockItems.has(item.id) ? null : (item.stock_shelf !== '' ? parseFloat(item.stock_shelf) : null)),
-                            stock_warehouse: item.presentation === 'sin stock' ? null : (outOfStockItems.has(item.id) ? null : (item.stock_warehouse !== '' ? parseFloat(item.stock_warehouse) : null))
+                            price: item.presentation === 'SIN STOCK' ? null : parseFloat(item.price),
+                            currency: item.presentation === 'SIN STOCK' ? null : item.currency,
+                            // Si el ítem está marcado como "SIN STOCK", guardar null en los campos de stock
+                            stock_shelf: item.presentation === 'SIN STOCK' ? null : (outOfStockItems.has(item.id) ? null : (item.stock_shelf !== '' ? parseFloat(item.stock_shelf) : null)),
+                            stock_warehouse: item.presentation === 'SIN STOCK' ? null : (outOfStockItems.has(item.id) ? null : (item.stock_warehouse !== '' ? parseFloat(item.stock_warehouse) : null))
                         })),
                         latitude,
                         longitude,
@@ -677,7 +680,7 @@
                         competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
                         myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
                     });
-                    setOutOfStockItems(new Set()); // Resetear el set de sin stock
+                    setOutOfStockItems(new Set()); // Resetear el set de SIN STOCK
                     setSuccessMessage("✅ Datos, ubicación y comentarios guardados con éxito.");
                 } catch (e) {
                     console.error("Error al guardar:", e);
@@ -787,7 +790,7 @@
                                 <textarea
                                     value={comments}
                                     onChange={(e) => setComments(e.target.value)}
-                                    placeholder="Describe alguna situación (ej: producto agotado, competidor sin stock, etc.)"
+                                    placeholder="Describe alguna situación (ej: producto agotado, competidor SIN STOCK, etc.)"
                                     className="w-full p-3 border border-gray-300 rounded-xl input-focus h-20 resize-none"
                                 />
                             </div>
