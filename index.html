@@ -296,7 +296,7 @@
                             </div>
                         )}
                         {/* Versión */}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.3</div>
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.4</div>
                     </div>
                 </div>
             );
@@ -363,7 +363,7 @@
                     {type === 'myitems' && (
                         <>
                             <div className="flex flex-col sm:w-1/6">
-                                <input type="number" placeholder="Stock Anaquel (En Kilos)" value={item.stock_shelf}
+                                <input type="number" placeholder="Stock Anaquel (En Unidad)" value={item.stock_shelf}
                                        onChange={(e) => onChange(e, type, item.id, 'stock_shelf')}
                                        disabled={isOutOfStock || disableFields}
                                        className={`w-full p-3 border border-gray-300 rounded-xl input-focus ${(isOutOfStock || disableFields) ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!isOutOfStock && !disableFields} />
