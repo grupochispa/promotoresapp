@@ -79,7 +79,7 @@
             @apply text-red-600 text-xs mt-1;
         }
         .dropdown-menu {
-            max-height: 300px;
+            max-height: 400px; /* Aumentado para acomodar 20 ítems */
             overflow-y: auto;
             z-index: 50;
         }
@@ -247,13 +247,13 @@
                     } else {
                         let estadoNombre = '', zonaNombre = promoterId.replace('promotor_', '').replace(/_/g, '-');
                         if (data.estado_id) {
-                            const { data: estadoData } = await supabase
+                            const {  estadoData } = await supabase
                                 .from('web_estados')
                                 .select('nombre')
                                 .eq('id', data.estado_id)
                                 .single();
                             estadoNombre = estadoData?.nombre || '';
-                            const { data: zonaData } = await supabase
+                            const {  zonaData } = await supabase
                                 .from('web_zonas')
                                 .select('nombre')
                                 .eq('nombre', `Zona ${zonaNombre}`)
@@ -363,7 +363,7 @@
                     {type === 'myitems' && (
                         <>
                             <div className="flex flex-col sm:w-1/6">
-                                <input type="number" placeholder="Stock Anaquel (En Unidad)" value={item.stock_shelf}
+                                <input type="number" placeholder="Stock Anaquel (En Kilos)" value={item.stock_shelf}
                                        onChange={(e) => onChange(e, type, item.id, 'stock_shelf')}
                                        disabled={isOutOfStock || disableFields}
                                        className={`w-full p-3 border border-gray-300 rounded-xl input-focus ${(isOutOfStock || disableFields) ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!isOutOfStock && !disableFields} />
@@ -397,11 +397,30 @@
                 </div>
             );
         };
-        // Componente de Autocompletado para Clientes
-        const ClienteAutocomplete = ({ value, onChange, clientes, loading }) => {
+        // Componente de Autocompletado para Clientes (BÚSQUEDA FLEXIBLE - HASTA 20 RESULTADOS)
+        const ClienteAutocomplete = ({ value, onChange }) => {
             const [isOpen, setIsOpen] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
+            const [clientes, setClientes] = useState([]);
+            const [loading, setLoading] = useState(false);
             const wrapperRef = useRef(null);
+            const debounceTimer = useRef(null);
+            // Función para buscar clientes usando RPC (búsqueda flexible en cualquier parte del texto)
+            const buscarClientes = async (term = '') => {
+                setLoading(true);
+                try {
+                    const { data, error } = await supabase
+                        .rpc('search_clientes', { search_term: term });
+                    if (error) throw error;
+                    setClientes(data || []);
+                } catch (e) {
+                    console.error('Error al buscar clientes:', e);
+                    setClientes([]);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            // Efecto para manejar clics fuera del componente
             useEffect(() => {
                 function handleClickOutside(event) {
                     if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -413,26 +432,42 @@
                     document.removeEventListener("mousedown", handleClickOutside);
                 };
             }, []);
+            // Efecto para buscar cuando cambia el término (con debounce)
             useEffect(() => {
-                if (value) {
+                if (debounceTimer.current) {
+                    clearTimeout(debounceTimer.current);
+                }
+                debounceTimer.current = setTimeout(() => {
+                    buscarClientes(searchTerm);
+                }, 300);
+                return () => {
+                    if (debounceTimer.current) {
+                        clearTimeout(debounceTimer.current);
+                    }
+                };
+            }, [searchTerm]);
+            // Manejar cuando se hace clic en el input
+            const handleFocus = () => {
+                setIsOpen(true);
+                if (!searchTerm && value) {
                     setSearchTerm(value);
                 }
-            }, [value]);
-            const filteredClientes = searchTerm
-                ? clientes.filter(cliente =>
-                    cliente.trade_name.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                : clientes.slice(0, 10);
-            const handleSelect = (clienteName) => {
-                onChange(clienteName);
-                setSearchTerm(clienteName);
-                setIsOpen(false);
+                if (!searchTerm) {
+                    buscarClientes(''); // Cargar los primeros 20 sin filtro
+                }
             };
+            // Manejar cambios en el input
             const handleChange = (e) => {
                 const term = e.target.value;
                 setSearchTerm(term);
                 onChange(term);
                 setIsOpen(true);
+            };
+            // Manejar selección de cliente
+            const handleSelect = (clienteName) => {
+                onChange(clienteName);
+                setSearchTerm(clienteName);
+                setIsOpen(false);
             };
             return (
                 <div className="relative" ref={wrapperRef}>
@@ -441,14 +476,18 @@
                         placeholder="Nombre del comercio"
                         value={searchTerm}
                         onChange={handleChange}
-                        onFocus={() => setIsOpen(true)}
+                        onFocus={handleFocus}
                         className="w-full p-3 border border-gray-300 rounded-xl input-focus"
                         required
                     />
-                    {isOpen && !loading && (
+                    {isOpen && (
                         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg dropdown-menu">
-                            {filteredClientes.length > 0 ? (
-                                filteredClientes.map((cliente, index) => (
+                            {loading ? (
+                                <div className="p-3 text-gray-500 text-sm">
+                                    Buscando comercios...
+                                </div>
+                            ) : clientes.length > 0 ? (
+                                clientes.map((cliente, index) => (
                                     <div
                                         key={index}
                                         className="p-3 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-b-0"
@@ -458,15 +497,16 @@
                                     </div>
                                 ))
                             ) : (
-                                <div className="p-3 text-gray-500 text-sm">
-                                    No se encontraron resultados
-                                </div>
+                                searchTerm ? (
+                                    <div className="p-3 text-gray-500 text-sm">
+                                        No se encontraron comercios que contengan "{searchTerm}"
+                                    </div>
+                                ) : (
+                                    <div className="p-3 text-gray-500 text-sm">
+                                        Escribe para buscar comercios
+                                    </div>
+                                )
                             )}
-                        </div>
-                    )}
-                    {loading && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-gray-500 text-sm">
-                            Cargando comercios...
                         </div>
                     )}
                 </div>
@@ -485,8 +525,6 @@
             const [priceErrors, setPriceErrors] = useState({}); // Errores de precio por ID
             const [priceWarning, setPriceWarning] = useState(''); // Nuevo estado para el mensaje de advertencia global
             const [outOfStockItems, setOutOfStockItems] = useState(new Set()); // IDs de ítems SIN STOCK
-            const [clientes, setClientes] = useState([]); // Lista de todos los clientes
-            const [clientesLoading, setClientesLoading] = useState(true); // Estado de carga de clientes
             useEffect(() => {
                 const fetchData = async () => {
                     setDataLoading(true);
@@ -495,13 +533,10 @@
                         const { data: myData } = await supabase.from('web_myproductos').select('presentation').order('presentation');
                         const { data: estadosData } = await supabase.from('web_estados').select('id, nombre').order('nombre');
                         const { data: zonasData } = await supabase.from('web_zonas').select('id, nombre, estado_id').order('nombre');
-                        const { data: clientesData } = await supabase.from('web_clientes').select('trade_name').order('trade_name');
                         setPresentationsCompetidor(compData?.map(p => p.presentation) || []);
                         setPresentationsMy(myData?.map(p => p.presentation) || []);
                         setEstados(estadosData || []);
                         setZonas(zonasData || []);
-                        setClientes(clientesData || []);
-                        setClientesLoading(false);
                         if (initialState) setNewItem(prev => ({ ...prev, state: initialState }));
                         if (initialZone) setNewItem(prev => ({ ...prev, zone: initialZone }));
                     } catch (e) {
@@ -770,14 +805,16 @@
                                     <ClienteAutocomplete
                                         value={newItem.trade}
                                         onChange={(value) => setNewItem(prev => ({ ...prev, trade: value }))}
-                                        clientes={clientes}
-                                        loading={clientesLoading}
                                     />
                                 </label>
                             </div>
                             <div>
-                                <div className="mb-2">
+                                <div className="flex justify-between items-center mb-2">
                                     <span className="text-gray-700 font-bold text-sm">Precios Competencia por Unidad</span>
+                                    <button type="button" onClick={() => handleAddClick('competitoritems')}
+                                            className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
+                                        <Plus size={24} />
+                                    </button>
                                 </div>
                                 {newItem.competitoritems.map(item => (
                                     <ItemRow key={item.id} item={item} type="competitoritems" onChange={handleInputChange}
@@ -785,16 +822,14 @@
                                              currencies={['BS', '$', 'Pesos']} canRemove={newItem.competitoritems.length > 1}
                                              errors={priceErrors} setErrors={setPriceErrors} />
                                 ))}
-                                <div className="flex justify-end mt-2">
-                                    <button type="button" onClick={() => handleAddClick('competitoritems')}
+                            </div>
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
+                                    <button type="button" onClick={() => handleAddClick('myitems')}
                                             className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
                                         <Plus size={24} />
                                     </button>
-                                </div>
-                            </div>
-                            <div>
-                                <div className="mb-2">
-                                    <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
                                 </div>
                                 {newItem.myitems.map(item => (
                                     <ItemRow key={item.id} item={item} type="myitems" onChange={handleInputChange}
@@ -803,12 +838,6 @@
                                              errors={priceErrors} setErrors={setPriceErrors} isMyItem={true}
                                              onToggleOutOfStock={toggleOutOfStock} isOutOfStock={outOfStockItems.has(item.id)} />
                                 ))}
-                                <div className="flex justify-end mt-2">
-                                    <button type="button" onClick={() => handleAddClick('myitems')}
-                                            className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
-                                        <Plus size={24} />
-                                    </button>
-                                </div>
                             </div>
                             <div className="flex flex-col">
                                 <label className="text-gray-700 font-semibold text-sm mb-1">Comentarios (opcional)</label>
@@ -851,7 +880,7 @@
                 if (manifest) {
                     const manifestLink = document.createElement('link');
                     manifestLink.rel = 'manifest';
-                    manifestLink.href = 'data:application/json,' + encodeURIComponent(manifest.textContent);
+                    manifestLink.href = 'application/json,' + encodeURIComponent(manifest.textContent);
                     document.head.appendChild(manifestLink);
                 }
             }, []);
