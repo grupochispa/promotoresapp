@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -410,7 +411,10 @@
                 setLoading(true);
                 try {
                     const { data, error } = await supabase
-                        .rpc('search_clientes', { search_term: term });
+                        .from('web_clientes')
+                        .select('trade_name')
+                        .ilike('trade_name', `%${term}%`)
+                        .limit(20);
                     if (error) throw error;
                     setClientes(data || []);
                 } catch (e) {
@@ -700,8 +704,11 @@
                         errMsg.push("Comercio (selecciona de la lista)");
                     } else {
                         const { data: clienteData } = await supabase
-                            .rpc('search_clientes', { search_term: newItem.trade });
-                        const isValidTrade = clienteData?.some(cliente => cliente.trade_name === newItem.trade);
+                            .from('web_clientes')
+                            .select('trade_name')
+                            .eq('trade_name', newItem.trade)
+                            .single();
+                        const isValidTrade = clienteData?.trade_name === newItem.trade;
                         if (!isValidTrade) {
                             errMsg.push("Comercio (debes seleccionar un comercio válido de la lista)");
                         }
