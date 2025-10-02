@@ -247,13 +247,13 @@
                     } else {
                         let estadoNombre = '', zonaNombre = promoterId.replace('promotor_', '').replace(/_/g, '-');
                         if (data.estado_id) {
-                            const {  estadoData } = await supabase
+                            const { data: estadoData } = await supabase
                                 .from('web_estados')
                                 .select('nombre')
                                 .eq('id', data.estado_id)
                                 .single();
                             estadoNombre = estadoData?.nombre || '';
-                            const {  zonaData } = await supabase
+                            const { data: zonaData } = await supabase
                                 .from('web_zonas')
                                 .select('nombre')
                                 .eq('nombre', `Zona ${zonaNombre}`)
@@ -296,7 +296,7 @@
                             </div>
                         )}
                         {/* Versión */}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.4</div>
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.5</div>
                     </div>
                 </div>
             );
@@ -363,7 +363,7 @@
                     {type === 'myitems' && (
                         <>
                             <div className="flex flex-col sm:w-1/6">
-                                <input type="number" placeholder="Stock Anaquel (En Kilos)" value={item.stock_shelf}
+                                <input type="number" placeholder="Stock Anaquel (En Unidades)" value={item.stock_shelf}
                                        onChange={(e) => onChange(e, type, item.id, 'stock_shelf')}
                                        disabled={isOutOfStock || disableFields}
                                        className={`w-full p-3 border border-gray-300 rounded-xl input-focus ${(isOutOfStock || disableFields) ? 'bg-gray-200 cursor-not-allowed' : ''}`} required={!isOutOfStock && !disableFields} />
@@ -693,8 +693,21 @@
                     // No retornamos aquí, permitimos guardar con advertencia
                 }
                 try {
-                    if (!newItem.state || !newItem.zone || !newItem.trade) {
-                        setError("Completa Estado, Zona y Comercio.");
+                    let errMsg = [];
+                    if (!newItem.state) errMsg.push("Estado");
+                    if (!newItem.zone) errMsg.push("Zona");
+                    if (!newItem.trade) {
+                        errMsg.push("Comercio (selecciona de la lista)");
+                    } else {
+                        const { data: clienteData } = await supabase
+                            .rpc('search_clientes', { search_term: newItem.trade });
+                        const isValidTrade = clienteData?.some(cliente => cliente.trade_name === newItem.trade);
+                        if (!isValidTrade) {
+                            errMsg.push("Comercio (debes seleccionar un comercio válido de la lista)");
+                        }
+                    }
+                    if (errMsg.length > 0) {
+                        setError(`Completa: ${errMsg.join(", ")}.`);
                         setLoading(false);
                         return;
                     }
@@ -809,28 +822,22 @@
                                 </label>
                             </div>
                             <div>
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-gray-700 font-bold text-sm">Precios Competencia por Unidad</span>
-                                    <button type="button" onClick={() => handleAddClick('competitoritems')}
-                                            className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
-                                        <Plus size={24} />
-                                    </button>
-                                </div>
+                                <span className="text-gray-700 font-bold text-sm">Precios Competencia por Unidad</span>
                                 {newItem.competitoritems.map(item => (
                                     <ItemRow key={item.id} item={item} type="competitoritems" onChange={handleInputChange}
                                              onRemove={handleRemoveClick} presentations={presentationsCompetidor}
                                              currencies={['BS', '$', 'Pesos']} canRemove={newItem.competitoritems.length > 1}
                                              errors={priceErrors} setErrors={setPriceErrors} />
                                 ))}
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
-                                    <button type="button" onClick={() => handleAddClick('myitems')}
+                                <div className="flex justify-end mt-2">
+                                    <button type="button" onClick={() => handleAddClick('competitoritems')}
                                             className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
                                         <Plus size={24} />
                                     </button>
                                 </div>
+                            </div>
+                            <div>
+                                <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
                                 {newItem.myitems.map(item => (
                                     <ItemRow key={item.id} item={item} type="myitems" onChange={handleInputChange}
                                              onRemove={handleRemoveClick} presentations={presentationsMy}
@@ -838,6 +845,12 @@
                                              errors={priceErrors} setErrors={setPriceErrors} isMyItem={true}
                                              onToggleOutOfStock={toggleOutOfStock} isOutOfStock={outOfStockItems.has(item.id)} />
                                 ))}
+                                <div className="flex justify-end mt-2">
+                                    <button type="button" onClick={() => handleAddClick('myitems')}
+                                            className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
+                                        <Plus size={24} />
+                                    </button>
+                                </div>
                             </div>
                             <div className="flex flex-col">
                                 <label className="text-gray-700 font-semibold text-sm mb-1">Comentarios (opcional)</label>
