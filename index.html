@@ -644,11 +644,11 @@
                     if (!item.price || !item.currency) return;
                     const price = parseFloat(item.price);
                     if (isNaN(price)) return;
-                    if (item.currency === 'BS' && (price < 100 || price > 1000)) {
-                        newErrors[item.id] = "El precio en Bs debe estar entre 100 y 1000 Bs.";
+                    if (item.currency === 'BS' && (price < 100 || price > 1200)) {
+                        newErrors[item.id] = "El precio en Bs debe estar entre 100 y 1200 Bs.";
                         hasError = true;
-                    } else if (item.currency === '$' && (price < 0.01 || price > 3)) {
-                        newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $3.00.";
+                    } else if (item.currency === '$' && (price < 0.01 || price > 6)) {
+                        newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $6.00.";
                         hasError = true;
                     }
                 });
