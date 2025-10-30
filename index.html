@@ -636,7 +636,7 @@
                     return newSet;
                 });
             };
-            const validatePrices = (items) => {
+            const validatePrices = (items, isMayorista) => {
                 let hasError = false;
                 const newErrors = {};
                 items.forEach(item => {
@@ -645,11 +645,20 @@
                     const price = parseFloat(item.price);
                     if (isNaN(price)) return;
                     if (item.currency === 'BS' && (price < 100 || price > 2500)) {
-                        newErrors[item.id] = "El precio en Bs debe estar entre 100 y 2000 Bs.";
+                        newErrors[item.id] = "El precio en Bs debe estar entre 100 y 2500 Bs.";
                         hasError = true;
-                    } else if (item.currency === '$' && (price < 0.01 || price > 10)) {
-                        newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $10.00.";
-                        hasError = true;
+                    } else if (item.currency === '$') {
+                        if (isMayorista) {
+                            if (price < 0.1 || price > 70) {
+                                newErrors[item.id] = "El precio en $ debe estar entre $0.10 y $70.00 para mayorista.";
+                                hasError = true;
+                            }
+                        } else {
+                            if (price < 0.01 || price > 10) {
+                                newErrors[item.id] = "El precio en $ debe estar entre $0.01 y $10.00.";
+                                hasError = true;
+                            }
+                        }
                     }
                 });
                 setPriceErrors(newErrors);
@@ -669,7 +678,7 @@
                 setPriceWarning(''); // Limpiar advertencia previa
                 // Validar precios (ahora bloquea el guardado si hay errores)
                 const allItems = [...newItem.competitoritems, ...newItem.myitems];
-                const arePricesValid = validatePrices(allItems);
+                const arePricesValid = validatePrices(allItems, isMayorista);
                 if (!arePricesValid) {
                     setLoading(false);
                     return; // Bloquea el guardado si hay precios fuera de rango
