@@ -296,7 +296,7 @@
                             </div>
                         )}
                         {/* Versión */}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.6</div>
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.5</div>
                     </div>
                 </div>
             );
@@ -652,8 +652,8 @@
                         hasError = true;
                     } else if (item.currency === '$') {
                         if (isMayorista) {
-                            if (price < 0.1 || price > 90) {
-                                newErrors[item.id] = "El precio en $ debe estar entre $0.10 y $90.00 para mayorista.";
+                            if (price < 0.1 || price > 70) {
+                                newErrors[item.id] = "El precio en $ debe estar entre $0.10 y $70.00 para mayorista.";
                                 hasError = true;
                             }
                         } else {
@@ -679,12 +679,14 @@
                 setSuccessMessage(null);
                 setGeoError(null);
                 setPriceWarning(''); // Limpiar advertencia previa
-                // Validar precios (ahora bloquea el guardado si hay errores)
-                const allItems = [...newItem.competitoritems, ...newItem.myitems];
-                const arePricesValid = validatePrices(allItems, isMayorista);
-                if (!arePricesValid) {
-                    setLoading(false);
-                    return; // Bloquea el guardado si hay precios fuera de rango
+                if (!isClienteCerrado) {
+                    // Validar precios (ahora bloquea el guardado si hay errores)
+                    const allItems = [...newItem.competitoritems, ...newItem.myitems];
+                    const arePricesValid = validatePrices(allItems, isMayorista);
+                    if (!arePricesValid) {
+                        setLoading(false);
+                        return; // Bloquea el guardado si hay precios fuera de rango
+                    }
                 }
                 // === OBTENER COORDENADAS (obligatorio, pero no bloquea) ===
                 if (!navigator.geolocation) {
@@ -730,19 +732,23 @@
                         setLoading(false);
                         return;
                     }
-                    const validCompetitorItems = newItem.competitoritems.filter(item =>
-                        item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
-                    );
-                    const validMyItems = newItem.myitems.filter(item =>
-                        item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
-                    );
+                    let validCompetitorItems = [];
+                    let validMyItems = [];
+                    if (!isClienteCerrado) {
+                        validCompetitorItems = newItem.competitoritems.filter(item =>
+                            item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
+                        );
+                        validMyItems = newItem.myitems.filter(item =>
+                            item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
+                        );
+                        if (validCompetitorItems.length === 0 && validMyItems.length === 0) {
+                            setError("Agrega al menos un ítem completo.");
+                            setLoading(false);
+                            return;
+                        }
+                    }
                     if (isClienteCerrado && !comments.trim()) {
                         setError("Para cliente cerrado, ingresa un comentario.");
-                        setLoading(false);
-                        return;
-                    }
-                    if (!isClienteCerrado && validCompetitorItems.length === 0 && validMyItems.length === 0) {
-                        setError("Agrega al menos un ítem completo.");
                         setLoading(false);
                         return;
                     }
@@ -863,44 +869,49 @@
                                     Cliente Cerrado
                                 </label>
                             </div>
-                            <div>
-                                <span className="text-gray-700 font-bold text-sm">Precios Competencia por Unidad</span>
-                                {newItem.competitoritems.map(item => (
-                                    <ItemRow key={item.id} item={item} type="competitoritems" onChange={handleInputChange}
-                                             onRemove={handleRemoveClick} presentations={presentationsCompetidor}
-                                             currencies={['BS', '$', 'Pesos']} canRemove={newItem.competitoritems.length > 1}
-                                             errors={priceErrors} setErrors={setPriceErrors} />
-                                ))}
-                                <div className="flex justify-end mt-2">
-                                    <button type="button" onClick={() => handleAddClick('competitoritems')}
-                                            className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
-                                        <Plus size={24} />
-                                    </button>
-                                </div>
-                            </div>
-                            <div>
-                                <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
-                                {newItem.myitems.map(item => (
-                                    <ItemRow key={item.id} item={item} type="myitems" onChange={handleInputChange}
-                                             onRemove={handleRemoveClick} presentations={presentationsMy}
-                                             currencies={['BS', '$', 'Pesos']} canRemove={newItem.myitems.length > 1}
-                                             errors={priceErrors} setErrors={setPriceErrors} isMyItem={true}
-                                             onToggleOutOfStock={toggleOutOfStock} isOutOfStock={outOfStockItems.has(item.id)} />
-                                ))}
-                                <div className="flex justify-end mt-2">
-                                    <button type="button" onClick={() => handleAddClick('myitems')}
-                                            className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
-                                        <Plus size={24} />
-                                    </button>
-                                </div>
-                            </div>
+                            {!isClienteCerrado && (
+                                <>
+                                    <div>
+                                        <span className="text-gray-700 font-bold text-sm">Precios Competencia por Unidad</span>
+                                        {newItem.competitoritems.map(item => (
+                                            <ItemRow key={item.id} item={item} type="competitoritems" onChange={handleInputChange}
+                                                     onRemove={handleRemoveClick} presentations={presentationsCompetidor}
+                                                     currencies={['BS', '$', 'Pesos']} canRemove={newItem.competitoritems.length > 1}
+                                                     errors={priceErrors} setErrors={setPriceErrors} />
+                                        ))}
+                                        <div className="flex justify-end mt-2">
+                                            <button type="button" onClick={() => handleAddClick('competitoritems')}
+                                                    className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
+                                                <Plus size={24} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-700 font-bold text-sm">Nuestros Precios por Unidad</span>
+                                        {newItem.myitems.map(item => (
+                                            <ItemRow key={item.id} item={item} type="myitems" onChange={handleInputChange}
+                                                     onRemove={handleRemoveClick} presentations={presentationsMy}
+                                                     currencies={['BS', '$', 'Pesos']} canRemove={newItem.myitems.length > 1}
+                                                     errors={priceErrors} setErrors={setPriceErrors} isMyItem={true}
+                                                     onToggleOutOfStock={toggleOutOfStock} isOutOfStock={outOfStockItems.has(item.id)} />
+                                        ))}
+                                        <div className="flex justify-end mt-2">
+                                            <button type="button" onClick={() => handleAddClick('myitems')}
+                                                    className="btn-icon bg-indigo-100 text-indigo-600 p-2 rounded-full hover:bg-indigo-200">
+                                                <Plus size={24} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                             <div className="flex flex-col">
-                                <label className="text-gray-700 font-semibold text-sm mb-1">Comentarios (opcional)</label>
+                                <label className="text-gray-700 font-semibold text-sm mb-1">Comentarios {isClienteCerrado ? '(requerido)' : '(opcional)'}</label>
                                 <textarea
                                     value={comments}
                                     onChange={(e) => setComments(e.target.value)}
                                     placeholder="Describe alguna situación (ej: producto agotado, competidor SIN STOCK, etc.)"
                                     className="w-full p-3 border border-gray-300 rounded-xl input-focus h-20 resize-none"
+                                    required={isClienteCerrado}
                                 />
                             </div>
                             <button type="submit" disabled={loading || dataLoading}
