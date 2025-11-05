@@ -296,7 +296,7 @@
                             </div>
                         )}
                         {/* Versión */}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.5</div>
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.6</div>
                     </div>
                 </div>
             );
@@ -342,7 +342,7 @@
                 }
             };
             const isNoStockPresentation = item.presentation === 'SIN STOCK';
-            const disableFields = isMyItem && isNoStockPresentation;
+            const disableFields = isNoStockPresentation;
             return (
                 <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 rounded-lg card">
                     <select value={item.presentation} onChange={(e) => onChange(e, type, item.id, 'presentation')}
@@ -529,6 +529,7 @@
             const [priceWarning, setPriceWarning] = useState(''); // Nuevo estado para el mensaje de advertencia global
             const [outOfStockItems, setOutOfStockItems] = useState(new Set()); // IDs de ítems SIN STOCK
             const [isMayorista, setIsMayorista] = useState(false); // Nuevo estado para checkbox de mayorista
+            const [isClienteCerrado, setIsClienteCerrado] = useState(false); // Nuevo estado para checkbox de cliente cerrado
             useEffect(() => {
                 const fetchData = async () => {
                     setDataLoading(true);
@@ -569,11 +570,13 @@
                     let updatedItems = prev[type].map(item => {
                         if (item.id === id) {
                             let updatedItem = { ...item, [field]: value };
-                            if (field === 'presentation' && value === 'SIN STOCK' && type === 'myitems') {
+                            if (field === 'presentation' && value === 'SIN STOCK') {
                                 updatedItem.price = '';
                                 updatedItem.currency = '';
-                                updatedItem.stock_shelf = '';
-                                updatedItem.stock_warehouse = '';
+                                if (type === 'myitems') {
+                                    updatedItem.stock_shelf = '';
+                                    updatedItem.stock_warehouse = '';
+                                }
                             }
                             return updatedItem;
                         }
@@ -649,8 +652,8 @@
                         hasError = true;
                     } else if (item.currency === '$') {
                         if (isMayorista) {
-                            if (price < 0.1 || price > 70) {
-                                newErrors[item.id] = "El precio en $ debe estar entre $0.10 y $70.00 para mayorista.";
+                            if (price < 0.1 || price > 90) {
+                                newErrors[item.id] = "El precio en $ debe estar entre $0.10 y $90.00 para mayorista.";
                                 hasError = true;
                             }
                         } else {
@@ -728,12 +731,17 @@
                         return;
                     }
                     const validCompetitorItems = newItem.competitoritems.filter(item =>
-                        item.presentation && item.price && item.currency
+                        item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
                     );
                     const validMyItems = newItem.myitems.filter(item =>
                         item.presentation && (item.presentation === 'SIN STOCK' || (item.price && item.currency))
                     );
-                    if (validCompetitorItems.length === 0 && validMyItems.length === 0) {
+                    if (isClienteCerrado && !comments.trim()) {
+                        setError("Para cliente cerrado, ingresa un comentario.");
+                        setLoading(false);
+                        return;
+                    }
+                    if (!isClienteCerrado && validCompetitorItems.length === 0 && validMyItems.length === 0) {
                         setError("Agrega al menos un ítem completo.");
                         setLoading(false);
                         return;
@@ -746,8 +754,8 @@
                         trade: newItem.trade,
                         competitoritems: validCompetitorItems.map(item => ({
                             presentation: item.presentation,
-                            price: parseFloat(item.price),
-                            currency: item.currency
+                            price: item.presentation === 'SIN STOCK' ? null : parseFloat(item.price),
+                            currency: item.presentation === 'SIN STOCK' ? null : item.currency
                         })),
                         myitems: validMyItems.map(item => ({
                             presentation: item.presentation,
@@ -761,11 +769,13 @@
                         longitude,
                         comments: comments.trim() || null,
                         p_mayorista: isMayorista ? 'Si' : 'No',
+                        cliente_cerrado: isClienteCerrado ? 'Si' : 'No',
                     };
                     const { error } = await supabase.from('web_precios').insert([visitData]);
                     if (error) throw error;
                     setComments('');
                     setIsMayorista(false); // Reset checkbox
+                    setIsClienteCerrado(false); // Reset checkbox
                     setNewItem({
                         state: initialState || '',
                         zone: initialZone || '',
@@ -844,6 +854,13 @@
                                     <input type="checkbox" checked={isMayorista} onChange={(e) => setIsMayorista(e.target.checked)}
                                            className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
                                     Precios Mayoristas
+                                </label>
+                            </div>
+                            <div className="flex items-center">
+                                <label className="flex items-center text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" checked={isClienteCerrado} onChange={(e) => setIsClienteCerrado(e.target.checked)}
+                                           className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
+                                    Cliente Cerrado
                                 </label>
                             </div>
                             <div>
