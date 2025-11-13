@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#4F46E5">
     <meta name="description" content="App para capturar precios de productos y competidores">
     <!-- Manifiesto PWA (archivo externo) -->
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React y ReactDOM -->
@@ -945,7 +945,7 @@
             useEffect(() => {
                 // Registrar Service Worker para PWA offline
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('/sw.js')
+                    navigator.serviceWorker.register('./sw.js')
                         .then(reg => console.log('SW registered!', reg))
                         .catch(err => console.error('SW registration failed', err));
                 }
