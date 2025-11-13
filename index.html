@@ -9,6 +9,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4F46E5">
     <meta name="description" content="App para capturar precios de productos y competidores">
+    <!-- Manifiesto PWA (archivo externo) -->
+    <link rel="manifest" href="/manifest.json">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React y ReactDOM -->
@@ -18,29 +20,6 @@
     <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.2/dist/umd/supabase.min.js"></script>
-    <!-- Manifiesto PWA -->
-    <script type="application/json" id="manifest-json">
-        {
-            "name": "Captura de Precios",
-            "short_name": "PreciosApp",
-            "start_url": ".",
-            "display": "standalone",
-            "background_color": "#F9FAFB",
-            "theme_color": "#4F46E5",
-            "icons": [
-                {
-                    "src": "https://via.placeholder.com/192x192.png?text=Icon",
-                    "sizes": "192x192",
-                    "type": "image/png"
-                },
-                {
-                    "src": "https://via.placeholder.com/512x512.png?text=Icon",
-                    "sizes": "512x512",
-                    "type": "image/png"
-                }
-            ]
-        }
-    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -777,20 +756,42 @@
                         p_mayorista: isMayorista ? 'Si' : 'No',
                         cliente_cerrado: isClienteCerrado ? 'Si' : 'No',
                     };
-                    const { error } = await supabase.from('web_precios').insert([visitData]);
-                    if (error) throw error;
-                    setComments('');
-                    setIsMayorista(false); // Reset checkbox
-                    setIsClienteCerrado(false); // Reset checkbox
-                    setNewItem({
-                        state: initialState || '',
-                        zone: initialZone || '',
-                        trade: '',
-                        competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
-                        myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
-                    });
-                    setOutOfStockItems(new Set()); // Resetear el set de SIN STOCK
-                    setSuccessMessage("✅ Datos, ubicación y comentarios guardados con éxito.");
+                    if (navigator.onLine) {
+                        const { error } = await supabase.from('web_precios').insert([visitData]);
+                        if (error) throw error;
+                        setComments('');
+                        setIsMayorista(false); // Reset checkbox
+                        setIsClienteCerrado(false); // Reset checkbox
+                        setNewItem({
+                            state: initialState || '',
+                            zone: initialZone || '',
+                            trade: '',
+                            competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
+                            myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
+                        });
+                        setOutOfStockItems(new Set()); // Resetear el set de SIN STOCK
+                        setSuccessMessage("✅ Datos, ubicación y comentarios guardados con éxito.");
+                    } else {
+                        // Guardar offline en IndexedDB
+                        const db = await openDB();
+                        await db.add('pendientes', visitData);
+                        setSuccessMessage("✅ Guardado offline. Se sincronizará al conectar.");
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            const sw = await navigator.serviceWorker.ready;
+                            sw.sync.register('sync-visitas');
+                        }
+                        setComments('');
+                        setIsMayorista(false);
+                        setIsClienteCerrado(false);
+                        setNewItem({
+                            state: initialState || '',
+                            zone: initialZone || '',
+                            trade: '',
+                            competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
+                            myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
+                        });
+                        setOutOfStockItems(new Set());
+                    }
                 } catch (e) {
                     console.error("Error al guardar:", e);
                     setError(`Error al guardar: ${e.message}`);
@@ -942,12 +943,11 @@
                 myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
             });
             useEffect(() => {
-                const manifest = document.getElementById('manifest-json');
-                if (manifest) {
-                    const manifestLink = document.createElement('link');
-                    manifestLink.rel = 'manifest';
-                    manifestLink.href = 'application/json,' + encodeURIComponent(manifest.textContent);
-                    document.head.appendChild(manifestLink);
+                // Registrar Service Worker para PWA offline
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('/service-worker.js')
+                        .then(reg => console.log('SW registered!', reg))
+                        .catch(err => console.error('SW registration failed', err));
                 }
             }, []);
             const handleLogin = (id, name, estadoNombre, zonaNombre) => {
@@ -992,6 +992,18 @@
             }
         } catch (e) {
             console.error('Error al renderizar:', e);
+        }
+        // Función para abrir IndexedDB (para offline)
+        async function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('chispaDB', 1);
+                request.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    db.createObjectStore('pendientes', { autoIncrement: true });
+                };
+                request.onsuccess = e => resolve(e.target.result);
+                request.onerror = e => reject(e.target.error);
+            });
         }
     </script>
 </body>
