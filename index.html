@@ -390,122 +390,129 @@
         };
         // Componente de Autocompletado para Clientes (BÚSQUEDA FLEXIBLE - HASTA 20 RESULTADOS)
         const ClienteAutocomplete = ({ value, onChange }) => {
-            const [isOpen, setIsOpen] = useState(false);
-            const [searchTerm, setSearchTerm] = useState('');
-            const [clientes, setClientes] = useState([]);
-            const [loading, setLoading] = useState(false);
-            const wrapperRef = useRef(null);
-            const debounceTimer = useRef(null);
-            // Función para buscar clientes usando RPC (búsqueda flexible en cualquier parte del texto)
-            const buscarClientes = async (term = '') => {
-                setLoading(true);
-                try {
-                    const { data, error } = await supabase
-                        .from('web_clientes')
-                        .select('trade_name')
-                        .ilike('trade_name', `%${term}%`)
-                        .limit(20);
-                    if (error) throw error;
-                    setClientes(data || []);
-                } catch (e) {
-                    console.error('Error al buscar clientes:', e);
-                    setClientes([]);
-                } finally {
-                    setLoading(false);
-                }
-            };
-            // Efecto para manejar clics fuera del componente
-            useEffect(() => {
-                function handleClickOutside(event) {
-                    if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-                        setIsOpen(false);
-                    }
-                }
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => {
-                    document.removeEventListener("mousedown", handleClickOutside);
-                };
-            }, []);
-            // Efecto para buscar cuando cambia el término (con debounce)
-            useEffect(() => {
-                if (debounceTimer.current) {
-                    clearTimeout(debounceTimer.current);
-                }
-                debounceTimer.current = setTimeout(() => {
-                    buscarClientes(searchTerm);
-                }, 300);
-                return () => {
-                    if (debounceTimer.current) {
-                        clearTimeout(debounceTimer.current);
-                    }
-                };
-            }, [searchTerm]);
-            // Manejar cuando se hace clic en el input
-            const handleFocus = () => {
-                setIsOpen(true);
-                if (!searchTerm && value) {
-                    setSearchTerm(value);
-                }
-                if (!searchTerm) {
-                    buscarClientes(''); // Cargar los primeros 20 sin filtro
-                }
-            };
-            // Manejar cambios en el input
-            const handleChange = (e) => {
-                const term = e.target.value;
-                setSearchTerm(term);
-                onChange(term);
-                setIsOpen(true);
-            };
-            // Manejar selección de cliente
-            const handleSelect = (clienteName) => {
-                onChange(clienteName);
-                setSearchTerm(clienteName);
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [clientes, setClientes] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const wrapperRef = useRef(null);
+    const debounceTimer = useRef(null);
+
+    // Función para buscar SOLO clientes activos
+    const buscarClientes = async (term = '') => {
+        setLoading(true);
+        try {
+            let query = supabase
+                .from('web_clientes')
+                .select('trade_name')
+                .eq('active', true)  // ← FILTRO AÑADIDO: solo clientes activos
+                .ilike('trade_name', `%${term}%`)
+                .order('trade_name', { ascending: true })
+                .limit(20);
+
+            const { data, error } = await query;
+            if (error) throw error;
+            setClientes(data || []);
+        } catch (e) {
+            console.error('Error al buscar clientes activos:', e);
+            setClientes([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // El resto del código permanece igual...
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
                 setIsOpen(false);
-            };
-            return (
-                <div className="relative" ref={wrapperRef}>
-                    <input
-                        type="text"
-                        placeholder="Nombre del comercio"
-                        value={searchTerm}
-                        onChange={handleChange}
-                        onFocus={handleFocus}
-                        className="w-full p-3 border border-gray-300 rounded-xl input-focus"
-                        required
-                    />
-                    {isOpen && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg dropdown-menu">
-                            {loading ? (
-                                <div className="p-3 text-gray-500 text-sm">
-                                    Buscando comercios...
-                                </div>
-                            ) : clientes.length > 0 ? (
-                                clientes.map((cliente, index) => (
-                                    <div
-                                        key={index}
-                                        className="p-3 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                        onClick={() => handleSelect(cliente.trade_name)}
-                                    >
-                                        {cliente.trade_name}
-                                    </div>
-                                ))
-                            ) : (
-                                searchTerm ? (
-                                    <div className="p-3 text-gray-500 text-sm">
-                                        No se encontraron comercios que contengan "{searchTerm}"
-                                    </div>
-                                ) : (
-                                    <div className="p-3 text-gray-500 text-sm">
-                                        Escribe para buscar comercios
-                                    </div>
-                                )
-                            )}
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
+        }
+        debounceTimer.current = setTimeout(() => {
+            buscarClientes(searchTerm);
+        }, 300);
+        return () => {
+            if (debounceTimer.current) {
+                clearTimeout(debounceTimer.current);
+            }
+        };
+    }, [searchTerm]);
+
+    const handleFocus = () => {
+        setIsOpen(true);
+        if (!searchTerm && value) {
+            setSearchTerm(value);
+        }
+        if (!searchTerm) {
+            buscarClientes(''); // Carga los primeros 20 clientes activos
+        }
+    };
+
+    const handleChange = (e) => {
+        const term = e.target.value;
+        setSearchTerm(term);
+        onChange(term);
+        setIsOpen(true);
+    };
+
+    const handleSelect = (clienteName) => {
+        onChange(clienteName);
+        setSearchTerm(clienteName);
+        setIsOpen(false);
+    };
+
+    return (
+        <div className="relative" ref={wrapperRef}>
+            <input
+                type="text"
+                placeholder="Nombre del comercio (solo activos)"
+                value={searchTerm}
+                onChange={handleChange}
+                onFocus={handleFocus}
+                className="w-full p-3 border border-gray-300 rounded-xl input-focus"
+                required
+            />
+            {isOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg dropdown-menu">
+                    {loading ? (
+                        <div className="p-3 text-gray-500 text-sm">
+                            Buscando comercios activos...
                         </div>
+                    ) : clientes.length > 0 ? (
+                        clientes.map((cliente, index) => (
+                            <div
+                                key={index}
+                                className="p-3 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onClick={() => handleSelect(cliente.trade_name)}
+                            >
+                                {cliente.trade_name}
+                            </div>
+                        ))
+                    ) : (
+                        searchTerm ? (
+                            <div className="p-3 text-gray-500 text-sm">
+                                No se encontraron comercios activos que contengan "{searchTerm}"
+                            </div>
+                        ) : (
+                            <div className="p-3 text-gray-500 text-sm">
+                                Escribe para buscar comercios activos
+                            </div>
+                        )
                     )}
                 </div>
-            );
-        };
+            )}
+        </div>
+    );
+};
         // Pantalla de Captura de Datos
         const DataEntryScreen = ({ promoterName, promoterId, initialState, initialZone, newItem, setNewItem, error, setError, successMessage, setSuccessMessage, loading, setLoading }) => {
             const [presentationsCompetidor, setPresentationsCompetidor] = useState([]);
