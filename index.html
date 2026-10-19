@@ -230,29 +230,16 @@
                 try {
                     const { data, error } = await supabase
                         .from('web_promotores')
-                        .select('promoter_name, estado_id')
-                        .eq('promoter_id', promoterId)
-                        .single();
-                    if (error) {
+                        .select('promoter_id, promoter_name, web_estados(nombre), web_zonas(nombre)')
+                        .ilike('promoter_id', promoterId.trim())
+                        .limit(1);
+                    if (error || !data || data.length === 0) {
                         setError('ID de promotor no encontrado.');
                     } else {
-                        let estadoNombre = '', zonaNombre = promoterId.replace('promotor_', '').replace(/_/g, '-');
-                        if (data.estado_id) {
-                            const { data: estadoData } = await supabase
-                                .from('web_estados')
-                                .select('nombre')
-                                .eq('id', data.estado_id)
-                                .single();
-                            estadoNombre = estadoData?.nombre || '';
-                            const { data: zonaData } = await supabase
-                                .from('web_zonas')
-                                .select('nombre')
-                                .eq('nombre', `Zona ${zonaNombre}`)
-                                .eq('estado_id', data.estado_id)
-                                .single();
-                            zonaNombre = zonaData?.nombre.replace('Zona ', '') || '';
-                        }
-                        onLogin(promoterId, data.promoter_name, estadoNombre, zonaNombre);
+                        const row = data[0];
+                        const estadoNombre = row.web_estados?.nombre || '';
+                        const zonaNombre = (row.web_zonas?.nombre || '').replace(/^Zona\s+/i, '');
+                        onLogin(row.promoter_id, row.promoter_name, estadoNombre, zonaNombre);
                     }
                 } catch (e) {
                     setError('Error al iniciar sesión.');
