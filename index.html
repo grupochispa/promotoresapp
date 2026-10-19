@@ -391,7 +391,7 @@
             let query = supabase
                 .from('web_clientes')
                 .select('trade_name')
-                .eq('active', true)  // ← FILTRO AÑADIDO: solo clientes activos
+                .eq('activo', true)  // ← FILTRO AÑADIDO: solo clientes activos
                 .ilike('trade_name', `%${term}%`)
                 .order('trade_name', { ascending: true })
                 .limit(20);
