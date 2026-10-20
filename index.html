@@ -274,7 +274,7 @@
                             </div>
                         )}
                         {/* Versión */}
-                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.5</div>
+                        <div className="text-center text-gray-500 text-xs mt-6">Versión 1.6</div>
                     </div>
                 </div>
             );
@@ -500,6 +500,103 @@
         </div>
     );
 };
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+                img.onload = () => {
+                    const maxEdge = 1600;
+                    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.width * scale));
+                    canvas.height = Math.max(1, Math.round(img.height * scale));
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    canvas.toBlob((blob) => {
+                        URL.revokeObjectURL(url);
+                        if (blob) resolve(blob);
+                        else reject(new Error('No se pudo procesar la foto'));
+                    }, 'image/jpeg', 0.72);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('No se pudo leer la foto'));
+                };
+                img.src = url;
+            });
+        }
+        async function uploadVisitPhotos(photos, folder) {
+            const names = [];
+            try {
+                for (const photo of photos) {
+                    const blob = await compressImage(photo.file);
+                    const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+                    const name = `${folder}_${stamp}_${crypto.randomUUID().slice(0, 8)}.jpg`;
+                    const { error } = await supabase.storage.from('visits_photos').upload(`${folder}/${name}`, blob, {
+                        contentType: 'image/jpeg',
+                        cacheControl: '3600',
+                        upsert: false,
+                    });
+                    if (error) throw new Error(error.message || 'No se pudo subir la foto');
+                    names.push(name);
+                }
+                return names;
+            } catch (err) {
+                if (names.length) {
+                    await supabase.storage.from('visits_photos').remove(names.map(name => `${folder}/${name}`));
+                }
+                throw err;
+            }
+        }
+        const PhotoCapture = ({ title, photos, onChange }) => {
+            const cameraRef = useRef(null);
+            const galleryRef = useRef(null);
+            const addFiles = (fileList) => {
+                const files = Array.from(fileList || []).filter(file => !file.type || file.type.startsWith('image/'));
+                if (!files.length) return;
+                onChange([...photos, ...files.map(file => ({
+                    id: crypto.randomUUID(),
+                    file,
+                    url: URL.createObjectURL(file),
+                }))]);
+            };
+            const removePhoto = (id) => {
+                const photo = photos.find(item => item.id === id);
+                if (photo) URL.revokeObjectURL(photo.url);
+                onChange(photos.filter(item => item.id !== id));
+            };
+            return (
+                <div className="flex flex-col gap-2">
+                    <span className="text-gray-700 font-semibold text-sm">{title}</span>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => cameraRef.current && cameraRef.current.click()}
+                                className="flex-1 bg-indigo-600 text-white font-semibold py-3 rounded-xl">
+                            Tomar foto
+                        </button>
+                        <button type="button" onClick={() => galleryRef.current && galleryRef.current.click()}
+                                className="flex-1 bg-white text-indigo-700 font-semibold py-3 rounded-xl border border-indigo-200">
+                            Galería
+                        </button>
+                    </div>
+                    <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                    <input ref={galleryRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                    {photos.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                            {photos.map(photo => (
+                                <div key={photo.id} className="relative">
+                                    <img src={photo.url} alt={title} className="w-full h-24 object-cover rounded-lg border border-gray-200" />
+                                    <button type="button" onClick={() => removePhoto(photo.id)}
+                                            className="absolute top-1 right-1 bg-black text-white rounded-full w-7 h-7 text-sm leading-none">
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
         // Pantalla de Captura de Datos
         const DataEntryScreen = ({ promoterName, promoterId, initialState, initialZone, newItem, setNewItem, error, setError, successMessage, setSuccessMessage, loading, setLoading }) => {
             const [presentationsCompetidor, setPresentationsCompetidor] = useState([]);
@@ -515,6 +612,14 @@
             const [outOfStockItems, setOutOfStockItems] = useState(new Set()); // IDs de ítems SIN STOCK
             const [isMayorista, setIsMayorista] = useState(false); // Nuevo estado para checkbox de mayorista
             const [isClienteCerrado, setIsClienteCerrado] = useState(false); // Nuevo estado para checkbox de cliente cerrado
+            const [beforePhotos, setBeforePhotos] = useState([]);
+            const [afterPhotos, setAfterPhotos] = useState([]);
+            const clearPhotos = () => {
+                beforePhotos.forEach(photo => URL.revokeObjectURL(photo.url));
+                afterPhotos.forEach(photo => URL.revokeObjectURL(photo.url));
+                setBeforePhotos([]);
+                setAfterPhotos([]);
+            };
             useEffect(() => {
                 const fetchData = async () => {
                     setDataLoading(true);
@@ -761,31 +866,10 @@
                         comments: comments.trim() || null,
                         p_mayorista: isMayorista ? 'Si' : 'No',
                         cliente_cerrado: isClienteCerrado ? 'Si' : 'No',
+                        before_photos: [],
+                        after_photos: [],
                     };
-                    if (navigator.onLine) {
-                        const { error } = await supabase.from('web_precios').insert([visitData]);
-                        if (error) throw error;
-                        setComments('');
-                        setIsMayorista(false); // Reset checkbox
-                        setIsClienteCerrado(false); // Reset checkbox
-                        setNewItem({
-                            state: initialState || '',
-                            zone: initialZone || '',
-                            trade: '',
-                            competitoritems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '' }],
-                            myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
-                        });
-                        setOutOfStockItems(new Set()); // Resetear el set de SIN STOCK
-                        setSuccessMessage("✅ Datos, ubicación y comentarios guardados con éxito.");
-                    } else {
-                        // Guardar offline en IndexedDB
-                        const db = await openDB();
-                        await db.add('pendientes', visitData);
-                        setSuccessMessage("✅ Guardado offline. Se sincronizará al conectar.");
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            const sw = await navigator.serviceWorker.ready;
-                            sw.sync.register('sync-visitas');
-                        }
+                    const resetForm = () => {
                         setComments('');
                         setIsMayorista(false);
                         setIsClienteCerrado(false);
@@ -797,6 +881,40 @@
                             myitems: [{ id: crypto.randomUUID(), presentation: '', price: '', currency: '', stock_shelf: '', stock_warehouse: '' }],
                         });
                         setOutOfStockItems(new Set());
+                        clearPhotos();
+                    };
+                    if (navigator.onLine) {
+                        const beforeNames = await uploadVisitPhotos(beforePhotos, 'before');
+                        const afterNames = await uploadVisitPhotos(afterPhotos, 'after');
+                        visitData.before_photos = beforeNames;
+                        visitData.after_photos = afterNames;
+                        const { error } = await supabase.from('web_precios').insert([visitData]);
+                        if (error) {
+                            const uploaded = [
+                                ...beforeNames.map(name => `before/${name}`),
+                                ...afterNames.map(name => `after/${name}`),
+                            ];
+                            if (uploaded.length) await supabase.storage.from('visits_photos').remove(uploaded);
+                            throw error;
+                        }
+                        resetForm();
+                        const photoCount = beforeNames.length + afterNames.length;
+                        setSuccessMessage(photoCount
+                            ? `✅ Datos guardados con ${photoCount} foto${photoCount === 1 ? '' : 's'}.`
+                            : "✅ Datos, ubicación y comentarios guardados con éxito.");
+                    } else {
+                        const db = await openDB();
+                        await idbAdd(db, 'pendientes', {
+                            ...visitData,
+                            _beforeBlobs: beforePhotos.map(photo => photo.file),
+                            _afterBlobs: afterPhotos.map(photo => photo.file),
+                        });
+                        setSuccessMessage("✅ Guardado localmente. Se enviará cuando recuperes la conexión.");
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            const sw = await navigator.serviceWorker.ready;
+                            sw.sync.register('sync-visitas');
+                        }
+                        resetForm();
                     }
                 } catch (e) {
                     console.error("Error al guardar:", e);
@@ -921,6 +1039,8 @@
                                     required={isClienteCerrado}
                                 />
                             </div>
+                            <PhotoCapture title="Fotos antes" photos={beforePhotos} onChange={setBeforePhotos} />
+                            <PhotoCapture title="Fotos después" photos={afterPhotos} onChange={setAfterPhotos} />
                             <button type="submit" disabled={loading || dataLoading}
                                     className="w-full btn-primary text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2">
                                 <Save size={24} />
@@ -955,6 +1075,10 @@
                         .then(reg => console.log('SW registered!', reg))
                         .catch(err => console.error('SW registration failed', err));
                 }
+                syncPendientes().catch(err => console.error('Sync pendiente', err));
+                const onOnline = () => syncPendientes().catch(err => console.error('Sync pendiente', err));
+                window.addEventListener('online', onOnline);
+                return () => window.removeEventListener('online', onOnline);
             }, []);
             const handleLogin = (id, name, estadoNombre, zonaNombre) => {
                 setPromoterId(id);
@@ -1010,6 +1134,70 @@
                 request.onsuccess = e => resolve(e.target.result);
                 request.onerror = e => reject(e.target.error);
             });
+        }
+        function idbAdd(db, storeName, value) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readwrite');
+                const req = tx.objectStore(storeName).add(value);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        function idbDelete(db, storeName, key) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readwrite');
+                const req = tx.objectStore(storeName).delete(key);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+        function idbAll(db, storeName) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readonly');
+                const out = [];
+                const req = tx.objectStore(storeName).openCursor();
+                req.onsuccess = () => {
+                    const cursor = req.result;
+                    if (cursor) {
+                        out.push({ key: cursor.key, value: cursor.value });
+                        cursor.continue();
+                    } else {
+                        resolve(out);
+                    }
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }
+        async function syncPendientes() {
+            if (!navigator.onLine) return;
+            const db = await openDB();
+            const rows = await idbAll(db, 'pendientes');
+            for (const row of rows) {
+                const value = row.value || {};
+                const beforeNames = await uploadVisitPhotos(
+                    (value._beforeBlobs || []).map(file => ({ file })),
+                    'before'
+                );
+                const afterNames = await uploadVisitPhotos(
+                    (value._afterBlobs || []).map(file => ({ file })),
+                    'after'
+                );
+                const visit = { ...value };
+                delete visit._beforeBlobs;
+                delete visit._afterBlobs;
+                visit.before_photos = beforeNames;
+                visit.after_photos = afterNames;
+                const { error } = await supabase.from('web_precios').insert([visit]);
+                if (error) {
+                    const uploaded = [
+                        ...beforeNames.map(name => `before/${name}`),
+                        ...afterNames.map(name => `after/${name}`),
+                    ];
+                    if (uploaded.length) await supabase.storage.from('visits_photos').remove(uploaded);
+                    throw error;
+                }
+                await idbDelete(db, 'pendientes', row.key);
+            }
         }
     </script>
 </body>
