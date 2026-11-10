@@ -105,6 +105,10 @@
         const supabaseUrl = 'https://fnmjdevxbimprposrhie.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZubWpkZXZ4YmltcHJwb3NyaGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTEzMDQsImV4cCI6MjEwNzk4NzMwNH0.QsOUXyiK8nFp3ZNtYBg5vDWwIKhhdctO-V91BjlLdqc';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        let activeLineaId = null;
+        supabase.from('web_lineas').select('id').eq('activa', true).limit(2).then(({ data }) => {
+            if (data && data.length === 1) activeLineaId = data[0].id;
+        });
         // Componente: Top 5 Promotores del Día (CON CAMBIOS APLICADOS)
         const TopSellers = () => {
             const [topSellers, setTopSellers] = useState([]);
@@ -807,12 +811,12 @@
                     if (!newItem.trade) {
                         errMsg.push("Comercio (selecciona de la lista)");
                     } else {
-                        const { data: clienteData } = await supabase
+                        const { data: clienteRows, error: clienteError } = await supabase
                             .from('web_clientes')
                             .select('trade_name')
                             .eq('trade_name', newItem.trade)
-                            .single();
-                        const isValidTrade = clienteData?.trade_name === newItem.trade;
+                            .limit(1);
+                        const isValidTrade = !clienteError && clienteRows?.[0]?.trade_name === newItem.trade;
                         if (!isValidTrade) {
                             errMsg.push("Comercio (debes seleccionar un comercio válido de la lista)");
                         }
@@ -868,6 +872,7 @@
                         cliente_cerrado: isClienteCerrado ? 'Si' : 'No',
                         before_photos: [],
                         after_photos: [],
+                        linea_id: activeLineaId,
                     };
                     const resetForm = () => {
                         setComments('');
@@ -888,7 +893,16 @@
                         const afterNames = await uploadVisitPhotos(afterPhotos, 'after');
                         visitData.before_photos = beforeNames;
                         visitData.after_photos = afterNames;
-                        const { error } = await supabase.from('web_precios').insert([visitData]);
+                        let error = null;
+                        for (let attempt = 0; attempt < 3; attempt++) {
+                            const saved = await supabase.from('web_precios').insert([visitData]);
+                            error = saved.error;
+                            if (!error) break;
+                            const msg = (error.message || '').toLowerCase();
+                            const retryable = msg.includes('fetch') || msg.includes('network') || msg.includes('timeout') || msg.includes('gateway');
+                            if (!retryable || attempt === 2) break;
+                            await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+                        }
                         if (error) {
                             const uploaded = [
                                 ...beforeNames.map(name => `before/${name}`),
@@ -1187,7 +1201,16 @@
                 delete visit._afterBlobs;
                 visit.before_photos = beforeNames;
                 visit.after_photos = afterNames;
-                const { error } = await supabase.from('web_precios').insert([visit]);
+                let error = null;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    const saved = await supabase.from('web_precios').insert([visit]);
+                    error = saved.error;
+                    if (!error) break;
+                    const msg = (error.message || '').toLowerCase();
+                    const retryable = msg.includes('fetch') || msg.includes('network') || msg.includes('timeout') || msg.includes('gateway');
+                    if (!retryable || attempt === 2) break;
+                    await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+                }
                 if (error) {
                     const uploaded = [
                         ...beforeNames.map(name => `before/${name}`),
